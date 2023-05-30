@@ -16,7 +16,14 @@ contract Marketplace {
         string memory _metadata
     ) external {
         address newEvent = address(
-            new Event(block.timestamp, _saleEnd, _ticketsPrice, _maxTickets,  _metadata, msg.sender)
+            new Event(
+                block.timestamp,
+                _saleEnd,
+                _ticketsPrice,
+                _maxTickets,
+                _metadata,
+                msg.sender
+            )
         );
 
         events.push(newEvent);
