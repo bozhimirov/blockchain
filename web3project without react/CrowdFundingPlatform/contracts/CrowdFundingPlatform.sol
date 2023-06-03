@@ -28,7 +28,8 @@ contract CrowdFundingPlatform {
             _name,
             _metadata,
             _duration,
-            _fundingGoal
+            _fundingGoal,
+            msg.sender
         );
 
         crowdfundings.push(address(newCrowdfunding));
