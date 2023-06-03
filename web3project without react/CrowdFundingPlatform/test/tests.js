@@ -6,10 +6,10 @@ const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 
 describe("CrowdFundingPlatform", function () {
-  let deployer, firstUser, secondUser;
+  let deployer, firstUser, secondUser, thirdUser;
 
   this.beforeAll(async function () {
-    [deployer, firstUser, secondUser] = await ethers.getSigners();
+    [deployer, firstUser, secondUser, thirdUser] = await ethers.getSigners();
   });
 
   async function deployPlatformAndCrowdfunding() {
@@ -49,15 +49,10 @@ describe("CrowdFundingPlatform", function () {
     const platform = await PlatformFactory.connect(deployer).deploy();
 
     await platform.deployed();
-    // console.log("platform.address");
-    // console.log(platform.address);
-    // console.log(platform.signer);
 
     const platformContracts = PlatformFactory.connect(deployer).attach(
       platform.address
     );
-    // console.log(platformContracts.address);
-    // console.log(platformContracts.signer);
     const duration = 10;
     const newCrowdfunding = await platform
       .connect(deployer)
@@ -95,34 +90,31 @@ describe("CrowdFundingPlatform", function () {
         deployPlatformAndCrowdfunding
       );
       const balance = await ethers.provider.getBalance(newCrowdFundingAddress);
-      // console.log(balance.toString());
-      // console.log(await newCrowdFund.getDetails());
-      await newCrowdFund.contribute({ value: 1 });
+      await newCrowdFund.connect(firstUser).contribute({ value: 1 });
 
-      await expect(newCrowdFund.getRefund()).to.be.revertedWith(
-        "still crowdfunding"
-      );
+      await expect(
+        newCrowdFund.connect(firstUser).getRefund()
+      ).to.be.revertedWith("still crowdfunding");
     });
 
     it("Reverts if Funding goal reached", async () => {
       const { newCrowdFund } = await loadFixture(deployPlatformAndCrowdfunding);
 
-      await newCrowdFund.contribute({ value: 2 });
-      // console.log(await newCrowdFund.getDetails());
+      await newCrowdFund.connect(firstUser).contribute({ value: 2 });
 
-      await expect(newCrowdFund.getRefund()).to.be.revertedWith(
-        "Funding goal reached"
-      );
+      await expect(
+        newCrowdFund.connect(firstUser).getRefund()
+      ).to.be.revertedWith("Funding goal reached");
     });
 
     it("Refund success", async () => {
       const { newCrowdFund } = await loadFixture(deployPlatformAndCrowdfunding);
 
       const balance = ethers.utils.formatEther(await newCrowdFund.balance());
-      await newCrowdFund.contribute({ value: 1 });
+      await newCrowdFund.connect(firstUser).contribute({ value: 1 });
       await network.provider.send("evm_increaseTime", [3600]);
       await network.provider.send("evm_mine");
-      await newCrowdFund.getRefund();
+      await newCrowdFund.connect(firstUser).getRefund();
       const newBalance = ethers.utils.formatEther(await newCrowdFund.balance());
 
       expect(balance).to.equal(newBalance);
@@ -132,61 +124,137 @@ describe("CrowdFundingPlatform", function () {
       const { newCrowdFund } = await loadFixture(deployPlatformAndCrowdfunding);
 
       const contribution = 1;
-      await newCrowdFund.contribute({ value: contribution });
+      await newCrowdFund.connect(firstUser).contribute({ value: contribution });
       await network.provider.send("evm_increaseTime", [3600]);
       await network.provider.send("evm_mine");
-      await expect(newCrowdFund.getRefund())
+      await expect(newCrowdFund.connect(firstUser).getRefund())
         .to.emit(newCrowdFund, "ContributorRefunded")
-        .withArgs(deployer.address, contribution);
+        .withArgs(firstUser.address, contribution);
     });
   });
 
-  // describe("rewardDistribution", function () {
-  //   it("Reverts if sender is not creator", async function () {
-  //     const { newCrowdFund } = await loadFixture(
-  //       deployPlatformAndCrowdfundingFinished
-  //     );
+  describe("rewardDistribution", function () {
+    it("Reverts if sender is not creator", async function () {
+      const { newCrowdFund } = await loadFixture(
+        deployPlatformAndCrowdfundingFinished
+      );
 
-  //     newCrowdFund.connect(firstUser).getRefund();
-  //     await expect(
-  //       newCrowdFund.rewardDistribution({ value: 10 })
-  //     ).to.be.revertedWith("user is not creator");
-  //   });
+      await network.provider.send("evm_increaseTime", [3600]);
+      await network.provider.send("evm_mine");
+      newCrowdFund.connect(deployer).payOut();
+      await expect(
+        newCrowdFund.connect(firstUser).rewardDistribution({ value: 10 })
+      ).to.be.revertedWith("user is not creator");
+    });
 
-  //   it("Reverts if amount is 0", async () => {
-  //     const { newCrowdFund, newCrowdFundingAddress, PlatformFactory } =
-  //       await loadFixture(deployPlatformAndCrowdfundingFinished);
-  //     const balance = ethers.utils.formatEther(await newCrowdFund.balance());
+    it("Reverts if amount is 0", async () => {
+      const { newCrowdFund, newCrowdFundingAddress, PlatformFactory } =
+        await loadFixture(deployPlatformAndCrowdfundingFinished);
+      const balance = ethers.utils.formatEther(await newCrowdFund.balance());
 
-  //     newCrowdFund.connect(deployer).payOut();
+      newCrowdFund.connect(deployer).payOut();
 
-  //     await expect(
-  //       newCrowdFund.connect(deployer).rewardDistribution({ value: 0 })
-  //     ).to.be.revertedWith("Amount must be > 0");
-  //   });
+      await expect(
+        newCrowdFund.connect(deployer).rewardDistribution({ value: 0 })
+      ).to.be.revertedWith("Amount must be > 0");
+    });
 
-  //   it("Success", async () => {
-  //     const { newCrowdFund, newCrowdFundingAddress } = await loadFixture(
-  //       deployPlatformAndCrowdfundingFinished
-  //     );
+    it("Success", async () => {
+      const { newCrowdFund, newCrowdFundingAddress } = await loadFixture(
+        deployPlatformAndCrowdfundingFinished
+      );
+      await network.provider.send("evm_increaseTime", [3600]);
+      await network.provider.send("evm_mine");
 
-  //     const distribution = 10;
-  //     await newCrowdFund.rewardDistribution({ value: 10 });
-  //     const balance = ethers.utils.formatEther(await newCrowdFund.balance());
+      newCrowdFund.connect(deployer).payOut();
+      const distribution = 10;
+      await newCrowdFund.connect(deployer).rewardDistribution({ value: 10 });
+      const balance = await ethers.provider.getBalance(newCrowdFundingAddress);
 
-  //     expect(balance).to.equal(distribution);
-  //   });
+      expect(balance).to.equal(distribution);
+    });
 
-  //   it("Refund contribution emits Event", async () => {
-  //     const { newCrowdFund, newCrowdFundingAddress } = await loadFixture(
-  //       deployPlatformAndCrowdfundingFinished
-  //     );
-  //     newCrowdFund.connect(deployer);
-  //     const contribution = 10;
+    it("rewardDistribution emits Event", async () => {
+      const { newCrowdFund, newCrowdFundingAddress } = await loadFixture(
+        deployPlatformAndCrowdfundingFinished
+      );
 
-  //     await expect(newCrowdFund.rewardDistribution({ value: contribution }))
-  //       .to.emit(newCrowdFund, "RewardDistributed")
-  //       .withArgs(deployer.address);
-  //   });
-  // });
+      await network.provider.send("evm_increaseTime", [3600]);
+      await network.provider.send("evm_mine");
+      newCrowdFund.connect(deployer).payOut();
+
+      const contribution = 10;
+      await expect(newCrowdFund.rewardDistribution({ value: contribution }))
+        .to.emit(newCrowdFund, "RewardDistributed")
+        .withArgs(deployer.address);
+    });
+  });
+
+  describe("withdrawDistribution", function () {
+    it("Reverts if  not contributor", async function () {
+      const { newCrowdFund } = await loadFixture(
+        deployPlatformAndCrowdfundingFinished
+      );
+
+      await network.provider.send("evm_increaseTime", [3600]);
+      await network.provider.send("evm_mine");
+      newCrowdFund.connect(deployer).payOut();
+      newCrowdFund.connect(deployer).rewardDistribution({ value: 10 });
+      await expect(
+        newCrowdFund.connect(thirdUser).withdrawDistributions(0)
+      ).to.be.revertedWith("not a contributor");
+    });
+
+    it("Reverts if a year passed", async () => {
+      const { newCrowdFund, newCrowdFundingAddress, PlatformFactory } =
+        await loadFixture(deployPlatformAndCrowdfundingFinished);
+
+      numberOfDistribution = 0;
+      await network.provider.send("evm_increaseTime", [3600]);
+      await network.provider.send("evm_mine");
+      await newCrowdFund.connect(deployer).payOut();
+      await newCrowdFund.connect(deployer).rewardDistribution({ value: 10 });
+      await network.provider.send("evm_increaseTime", [31536500]);
+      await network.provider.send("evm_mine");
+      await expect(
+        newCrowdFund
+          .connect(firstUser)
+          .withdrawDistributions(numberOfDistribution)
+      ).to.be.revertedWith("claim expired");
+    });
+
+    it("Success", async () => {
+      const { newCrowdFund, newCrowdFundingAddress } = await loadFixture(
+        deployPlatformAndCrowdfundingFinished
+      );
+      expectedDistributedAmount = 5;
+      numberOfDistribution = 0;
+      await network.provider.send("evm_increaseTime", [3600]);
+      await network.provider.send("evm_mine");
+      await newCrowdFund.connect(deployer).payOut();
+      await newCrowdFund.connect(deployer).rewardDistribution({ value: 10 });
+      await newCrowdFund
+        .connect(firstUser)
+        .withdrawDistributions(numberOfDistribution);
+      const balance = await ethers.provider.getBalance(newCrowdFundingAddress);
+
+      expect(balance).to.equal(expectedDistributedAmount);
+    });
+
+    it("Refund contribution emits Event", async () => {
+      const { newCrowdFund, newCrowdFundingAddress } = await loadFixture(
+        deployPlatformAndCrowdfundingFinished
+      );
+      expectedDistributedAmount = 5;
+      numberOfDistribution = 0;
+
+      await network.provider.send("evm_increaseTime", [3600]);
+      await network.provider.send("evm_mine");
+      newCrowdFund.connect(deployer).payOut();
+      newCrowdFund.connect(deployer).rewardDistribution({ value: 10 });
+      await expect(newCrowdFund.connect(firstUser).withdrawDistributions(0))
+        .to.emit(newCrowdFund, "ContributorClaimedReward")
+        .withArgs(firstUser.address, numberOfDistribution);
+    });
+  });
 });
