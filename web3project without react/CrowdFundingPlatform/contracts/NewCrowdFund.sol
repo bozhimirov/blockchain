@@ -45,7 +45,7 @@ contract Crowdfunding is ERC20, Ownable {
     bool public fundingReached;
     uint256 public balance;
     uint256 public duration;
-    mapping(address => uint) public withdrawals;
+    mapping(uint256 => mapping(address => uint256)) public withdrawals;
     mapping(address => uint) public contributions;
     address creator;
 
@@ -56,7 +56,8 @@ contract Crowdfunding is ERC20, Ownable {
         string memory _name,
         string memory _metadata,
         uint256 _fundingGoal,
-        uint256 _duration
+        uint256 _duration,
+        address _creator
     ) ERC20("_name", "") {
         require(bytes(_name).length > 0, "Name required");
         require(bytes(_metadata).length > 0, "Description required");
@@ -69,8 +70,8 @@ contract Crowdfunding is ERC20, Ownable {
         metadata = _metadata;
         duration = _duration;
         fundingGoal = _fundingGoal;
-        // transferOwnership(msg.sender);
-        creator = msg.sender;
+        transferOwnership(_creator);
+        creator = _creator;
         // _mint(address(this), _fundingGoal);
     }
 
@@ -92,6 +93,12 @@ contract Crowdfunding is ERC20, Ownable {
 
     event ContributorRefunded(address indexed contributor, uint256 amount);
     event ContributorClaimedReward(address indexed contributor, uint256 amount);
+    event Track(
+        string indexed _function,
+        address sender,
+        uint256 value,
+        bytes data
+    );
 
     // Modifier to check if the function caller is the project creator
     modifier isCreator() {
@@ -155,7 +162,7 @@ contract Crowdfunding is ERC20, Ownable {
 
     /** @dev Function to give the received funds to project starter.
      */
-    function payOut() external {
+    function payOut() external isCreator onlyOwner {
         require(msg.sender == creator);
         require(block.timestamp > startTime + duration, "still crowdfunding");
         require(
@@ -266,30 +273,42 @@ contract Crowdfunding is ERC20, Ownable {
         uint256 numberOfDistribution
     ) external onlyContributor {
         require(
-            distributions[numberOfDistribution].amount > 0,
-            "no amount for distribution"
-        );
-        require(
-            distributions[numberOfDistribution].timeStamp + 365 * 1 days <
+            distributions[numberOfDistribution].timeStamp + 31535999 >
                 block.timestamp,
             "claim expired"
         );
-
         uint256 contribution = contributions[msg.sender];
-        uint256 contributionPercentage = contribution.mul(100).div(balance);
+        uint256 contributorReward;
+        uint256 contributionPercentage;
+        if (distributions[numberOfDistribution].amount > 0) {
+            contributionPercentage = contribution.mul(100).div(fundingGoal);
 
-        uint256 contributorReward = (
-            distributions[numberOfDistribution]
-                .amount
-                .mul(contributionPercentage)
-                .div(100)
-        );
+            contributorReward = (
+                distributions[numberOfDistribution]
+                    .amount
+                    .mul(contributionPercentage)
+                    .div(100)
+            );
+        } else {
+            contributorReward = 0;
+        }
+        withdrawals[numberOfDistribution][msg.sender] = contributorReward;
+        if (contributorReward > 0) {
+            payable(msg.sender).transfer(contributorReward);
+        }
 
-        distributions[numberOfDistribution].amount -= contributorReward;
+        require(address(this).balance > 0, "no amount for distribution");
 
-        _transfer(address(this), msg.sender, contributorReward);
         // null withdrawals for user
 
-        emit ContributorClaimedReward(msg.sender, contributorReward);
+        emit ContributorClaimedReward(msg.sender, numberOfDistribution);
+    }
+
+    fallback() external payable {
+        emit Track("fallback()", msg.sender, msg.value, msg.data);
+    }
+
+    receive() external payable {
+        emit Track("receive()", msg.sender, msg.value, "");
     }
 }
