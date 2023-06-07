@@ -7,14 +7,12 @@ module.exports = {
   networks: {
     sepolia: {
       url: "https://eth-sepolia.g.alchemy.com/v2/E4AQD--63pu3qBGZFotdy7hEEhhj-348",
-      accounts: [
-        "c6706990f581deda2c46a057b738ab3d04cefebe1737ad3e479847131730f9ef",
-      ],
+      accounts: [ACCOUNT_PRIVATE_KEY],
     },
   },
   etherscan: {
     // Your API key for Etherscan
     // Obtain one at https://etherscan.io/
-    apiKey: "4YZTFDABGRX1BTHTNNTJISUBST6DA7XXJ4",
+    apiKey: ETHERSCAN_API_URL,
   },
 };
